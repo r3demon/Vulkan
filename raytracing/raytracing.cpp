@@ -84,9 +84,9 @@ public:
 
 	// SSBO triangle declaration 
 	struct Triangle {
-		glm::vec3 pos;
-		glm::vec3 normal;
-		float radius;
+		glm::vec3 v0;
+		glm::vec3 v1;
+		glm::vec3 v2;
 		glm::vec3 diffuse;
 		float specular;
 		uint32_t id;
@@ -316,13 +316,13 @@ public:
 		return sphere;
 	}
 
-	Triangle newTriangle(glm::vec3 pos, glm::vec3 normal, float radius, glm::vec3 diffuse, float specular)
+	Triangle newTriangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 diffuse, float specular)
 	{
 		Triangle triangle;
 		triangle.id = currentId++;
-		triangle.pos = pos;
-		triangle.normal = normal;
-		triangle.radius = radius;
+		triangle.v0 = v0;
+		triangle.v1 = v1;
+		triangle.v2 = v2;
 		triangle.diffuse = diffuse;
 		triangle.specular = specular;
 		return triangle;
@@ -345,8 +345,8 @@ public:
 		// Spheres
 		std::vector<Sphere> spheres;
 		spheres.push_back(newSphere(glm::vec3(1.75f, -0.5f, 0.0f), 1.0f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
-		//spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
-		//spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
+		spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
+		spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
 		VkDeviceSize storageBufferSize = spheres.size() * sizeof(Sphere);
 
 		// Stage
@@ -377,9 +377,9 @@ public:
 
 		// Triangles
 		std::vector<Triangle> triangles;
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.9f, 0.9f, 0.9f), 0.5f, glm::vec3(0.7f, 0.0f, 0.0f), 20.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.8f, 0.8f, 0.8f), 0.5f, glm::vec3(0.0f, 0.7f, 0.0f), 20.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.7f, 0.7f, 0.7f), 0.5f, glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
+		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.7f, 0.0f, 0.0f), 20.0f));
+		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.7f, 0.0f), 20.0f));
+		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.7f, 0.7f, 0.7f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
 		storageBufferSize = triangles.size() * sizeof(Triangle);
 
 		// Stage
@@ -407,7 +407,7 @@ public:
 
 		// Planes
 		std::vector<Plane> planes;
-		const float roomDim = 4.0f;
+		const float roomDim = 5.0f;
 		planes.push_back(newPlane(glm::vec3(0.0f, 1.0f, 0.0f), roomDim, glm::vec3(1.0f), 32.0f));
 		planes.push_back(newPlane(glm::vec3(0.0f, -1.0f, 0.0f), roomDim, glm::vec3(1.0f), 32.0f));
 		planes.push_back(newPlane(glm::vec3(0.0f, 0.0f, 1.0f), roomDim, glm::vec3(1.0f), 32.0f));
