@@ -11,11 +11,20 @@
 #include <string.h>
 #include <assert.h>
 #include <vector>
+#include <unordered_map>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 #include <vulkan/vulkan.h>
 #include "vulkanexamplebase.h"
@@ -30,9 +39,32 @@
 #define TEX_DIM 2048
 #endif
 
+const std::string MODEL_PATH = "models/bunny-lowpoly-scaled.obj";
+
+struct Vertex {
+	glm::vec3 pos;
+	glm::vec3 color;
+	glm::vec2 texCoord;
+
+	bool operator==(const Vertex& other) const {
+		return pos == other.pos && color == other.color && texCoord == other.texCoord;
+	}
+};
+
+namespace std {
+	template<> struct hash<Vertex> {
+		size_t operator()(Vertex const& vertex) const {
+			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
+		}
+	};
+}
+
 class VulkanExample : public VulkanExampleBase
 {
 public:
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
+
 	vks::Texture textureComputeTarget;
 
 	// Resources for the graphics part of the example
@@ -321,14 +353,63 @@ public:
 		return plane;
 	}
 
+	void VulkanExample::loadModel()
+	{
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string err;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str())) {
+			throw std::runtime_error(err);
+		}
+
+		std::unordered_map<Vertex, int> uniqueVertices = {};
+		for (auto& shape : shapes) {
+			for (auto& index : shape.mesh.indices) {
+				Vertex vertex = {};
+				vertex.pos = {
+					attrib.vertices[3 * index.vertex_index + 0] ,
+					attrib.vertices[3 * index.vertex_index + 1] ,
+					attrib.vertices[3 * index.vertex_index + 2]
+				};
+
+				//vertex.texCoord = {
+				//	attrib.texcoords[2 * index.texcoord_index + 0],
+				//	1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+				//};
+
+				vertex.color = { 1.0f, 1.0f, 1.0f };
+				if (uniqueVertices.count(vertex) == 0) {
+					uniqueVertices[vertex] = vertices.size();
+					vertices.push_back(vertex);
+				}
+
+				indices.push_back(uniqueVertices[vertex]);
+			}
+		}
+
+	}
+
+	glm::vec3 getNormalTriangle(glm::vec3 pos0, glm::vec3 pos1, glm::vec3 pos2) {
+		glm::vec3 a = pos1 - pos0, b = pos2 - pos0;
+		return glm::normalize(glm::cross(a, b));
+	}
+
+
 	// Setup and fill the compute shader storage buffers containing primitives for the raytraced scene
 	void prepareStorageBuffers()
 	{
 		// Triangles
 		std::vector<Triangle> triangles;
-		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-1.1f, -1.0f, 0.2f), glm::vec3(0.1f, -1.0f, 0.3f), glm::vec3(0.9f, 0.5f, 0.5f), 30.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-0.8f, 0.1f, 0.2f), glm::vec3(0.1f, -0.9f, 0.3f), glm::vec3(0.5f, 0.7f, 0.5f), 20.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.1f, -0.7f, 0.2f), glm::vec3(-0.9f, 0.1f, 0.3f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
+		//triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-1.1f, -1.0f, 0.2f), glm::vec3(0.1f, -1.0f, 0.3f), glm::vec3(0.9f, 0.5f, 0.5f), 30.0f));
+		//triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-0.8f, 0.1f, 0.2f), glm::vec3(0.1f, -0.9f, 0.3f), glm::vec3(0.5f, 0.7f, 0.5f), 20.0f));
+		//triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.1f, -0.7f, 0.2f), glm::vec3(-0.9f, 0.1f, 0.3f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
+		loadModel();
+		for (int i = 0; i < indices.size() / 3; i++) {
+			triangles.push_back(newTriangle(vertices[indices[3 * i]].pos, vertices[indices[3 * i + 1]].pos, vertices[indices[3 * i + 2]].pos, glm::vec3(0.0f, 1.0f, 1.0f), 32.0f));
+		}
+
 		VkDeviceSize storageBufferSize = triangles.size() * sizeof(Triangle);
 
 		// Stage
