@@ -47,7 +47,6 @@ public:
 	// Resources for the compute part of the example
 	struct {
 		struct {
-			vks::Buffer spheres;					// (Shader) storage buffer object with scene spheres
 			vks::Buffer triangles;                  // (Shader) storage buffer object with scene triangles
 			vks::Buffer planes;						// (Shader) storage buffer object with scene planes
 		} storageBuffers;
@@ -72,21 +71,14 @@ public:
 		} ubo;
 	} compute;
 
-	// SSBO sphere declaration 
-	struct Sphere {									// Shader uses std140 layout (so we only use vec4 instead of vec3)
-		glm::vec3 pos;								
-		float radius;
-		glm::vec3 diffuse;
-		float specular;
-		uint32_t id;								// Id used to identify sphere for raytracing
-		glm::ivec3 _pad;
-	};
-
 	// SSBO triangle declaration 
 	struct Triangle {
 		glm::vec3 v0;
+		float _pad0;
 		glm::vec3 v1;
+		float _pad1;
 		glm::vec3 v2;
+		float _pad2;
 		glm::vec3 diffuse;
 		float specular;
 		uint32_t id;
@@ -105,17 +97,18 @@ public:
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 	{
-		title = "Vulkan Example - Compute shader ray tracing";
+		title = "Ray Tracing";
 		enableTextOverlay = true;
 		compute.ubo.aspectRatio = (float)width / (float)height;
 		timerSpeed *= 0.25f;
 
-		camera.type = Camera::CameraType::lookat;
+		camera.type = Camera::CameraType::firstperson;
 		camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 512.0f);
 		camera.setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
 		camera.setTranslation(glm::vec3(0.0f, 0.0f, -4.0f));
-		camera.rotationSpeed = 0.0f;
+		camera.rotationSpeed = 1.1f;
 		camera.movementSpeed = 2.5f;
+
 	}
 
 	~VulkanExample()
@@ -132,7 +125,7 @@ public:
 		vkDestroyFence(device, compute.fence, nullptr);
 		vkDestroyCommandPool(device, compute.commandPool, nullptr);
 		compute.uniformBuffer.destroy();
-		compute.storageBuffers.spheres.destroy();
+		compute.storageBuffers.triangles.destroy();
 		compute.storageBuffers.planes.destroy();
 
 		textureComputeTarget.destroy();
@@ -305,17 +298,6 @@ public:
 
 	uint32_t currentId = 0;	// Id used to identify objects by the ray tracing shader
 
-	Sphere newSphere(glm::vec3 pos, float radius, glm::vec3 diffuse, float specular)
-	{
-		Sphere sphere;
-		sphere.id = currentId++;
-		sphere.pos = pos;
-		sphere.radius = radius;
-		sphere.diffuse = diffuse;
-		sphere.specular = specular;
-		return sphere;
-	}
-
 	Triangle newTriangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 diffuse, float specular)
 	{
 		Triangle triangle;
@@ -342,47 +324,16 @@ public:
 	// Setup and fill the compute shader storage buffers containing primitives for the raytraced scene
 	void prepareStorageBuffers()
 	{
-		// Spheres
-		std::vector<Sphere> spheres;
-		spheres.push_back(newSphere(glm::vec3(1.75f, -0.5f, 0.0f), 1.0f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
-		spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
-		spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
-		VkDeviceSize storageBufferSize = spheres.size() * sizeof(Sphere);
+		// Triangles
+		std::vector<Triangle> triangles;
+		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-1.1f, -1.0f, 0.2f), glm::vec3(0.1f, -1.0f, 0.3f), glm::vec3(0.9f, 0.5f, 0.5f), 30.0f));
+		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(-0.8f, 0.1f, 0.2f), glm::vec3(0.1f, -0.9f, 0.3f), glm::vec3(0.5f, 0.7f, 0.5f), 20.0f));
+		triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.1f, -0.7f, 0.2f), glm::vec3(-0.9f, 0.1f, 0.3f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
+		VkDeviceSize storageBufferSize = triangles.size() * sizeof(Triangle);
 
 		// Stage
 		vks::Buffer stagingBuffer;
 
-		vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&stagingBuffer,
-			storageBufferSize,
-			spheres.data());
-
-		vulkanDevice->createBuffer(
-			// The SSBO will be used as a storage buffer for the compute pipeline and as a vertex buffer in the graphics pipeline
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			&compute.storageBuffers.spheres,
-			storageBufferSize);
-
-		// Copy to staging buffer
-		VkCommandBuffer copyCmd = VulkanExampleBase::createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-		VkBufferCopy copyRegion = {};
-		copyRegion.size = storageBufferSize;
-		vkCmdCopyBuffer(copyCmd, stagingBuffer.buffer, compute.storageBuffers.spheres.buffer, 1, &copyRegion);
-		VulkanExampleBase::flushCommandBuffer(copyCmd, queue, true);
-
-		stagingBuffer.destroy();
-
-		// Triangles
-		std::vector<Triangle> triangles;
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.7f, 0.0f, 0.0f), 20.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.7f, 0.0f), 20.0f));
-		triangles.push_back(newTriangle(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.7f, 0.7f, 0.7f), glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
-		storageBufferSize = triangles.size() * sizeof(Triangle);
-
-		// Stage
 		vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -398,7 +349,8 @@ public:
 			storageBufferSize);
 
 		// Copy to staging buffer
-		copyCmd = VulkanExampleBase::createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+		VkCommandBuffer copyCmd = VulkanExampleBase::createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+		VkBufferCopy copyRegion = {};
 		copyRegion.size = storageBufferSize;
 		vkCmdCopyBuffer(copyCmd, stagingBuffer.buffer, compute.storageBuffers.triangles.buffer, 1, &copyRegion);
 		VulkanExampleBase::flushCommandBuffer(copyCmd, queue, true);
@@ -616,21 +568,16 @@ public:
 				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				VK_SHADER_STAGE_COMPUTE_BIT,
 				1),
-			// Binding 1: Shader storage buffer for the spheres
-			vks::initializers::descriptorSetLayoutBinding(
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				VK_SHADER_STAGE_COMPUTE_BIT,
-				2),
 			// Binding 1: Shader storage buffer for the triangles
 			vks::initializers::descriptorSetLayoutBinding(
 				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				VK_SHADER_STAGE_COMPUTE_BIT,
-				3),
+				2),
 			// Binding 1: Shader storage buffer for the planes
 			vks::initializers::descriptorSetLayoutBinding(
 				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				VK_SHADER_STAGE_COMPUTE_BIT,
-				4)
+				3)
 		};
 
 		VkDescriptorSetLayoutCreateInfo descriptorLayout =
@@ -669,23 +616,17 @@ public:
 				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				1,
 				&compute.uniformBuffer.descriptor),
-			// Binding 2: Shader storage buffer for the spheres
-			vks::initializers::writeDescriptorSet(
-				compute.descriptorSet,
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				2,
-				&compute.storageBuffers.spheres.descriptor),
 			// Binding 2: Shader storage buffer for the striangles
 			vks::initializers::writeDescriptorSet(
 				compute.descriptorSet,
 				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				3,
+				2,
 				&compute.storageBuffers.triangles.descriptor),
 			// Binding 2: Shader storage buffer for the planes
 			vks::initializers::writeDescriptorSet(
 				compute.descriptorSet,
 				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				4,
+				3,
 				&compute.storageBuffers.planes.descriptor)
 		};
 
