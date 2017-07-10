@@ -39,7 +39,7 @@
 #define TEX_DIM 2048
 #endif
 
-const std::string MODEL_PATH = "models/bunny-lowpoly-scaled.obj";
+const std::string MODEL_PATH = "./../data/models/lowpoly/bunny-lowpoly-scaled.obj";
 
 struct Vertex {
 	glm::vec3 pos;
@@ -105,16 +105,24 @@ public:
 
 	// SSBO triangle declaration 
 	struct Triangle {
-		glm::vec3 v0;
-		float _pad0;
-		glm::vec3 v1;
-		float _pad1;
-		glm::vec3 v2;
-		float _pad2;
-		glm::vec3 diffuse;
-		float specular;
-		uint32_t id;
-		glm::ivec3 _pad;
+		glm::vec3 v0;		//12 |
+		float _pad0;		//4
+		glm::vec3 v1;		//12
+		float _pad1;		//4
+		glm::vec3 v2;		//12
+		float _pad2;		//4
+		glm::vec3 normal;	//12
+							//float _padNormal;	//4
+		float specular;		//4
+							//glm::ivec3 _padSp;	//12
+
+		glm::vec3 diffuse;	//12
+							//float _padDif;		//4
+		uint32_t id;		//4
+							//glm::ivec3 _padId;	//12
+							//glm::ivec2 _pad8bit;
+							//uint32_t _pad4bit;
+
 	};
 
 	// SSBO plane declaration
@@ -330,13 +338,14 @@ public:
 
 	uint32_t currentId = 0;	// Id used to identify objects by the ray tracing shader
 
-	Triangle newTriangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 diffuse, float specular)
+	Triangle newTriangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 normal, glm::vec3 diffuse, float specular)
 	{
 		Triangle triangle;
 		triangle.id = currentId++;
 		triangle.v0 = v0;
 		triangle.v1 = v1;
 		triangle.v2 = v2;
+		triangle.normal = normal;
 		triangle.diffuse = diffuse;
 		triangle.specular = specular;
 		return triangle;
@@ -407,7 +416,7 @@ public:
 		//triangles.push_back(newTriangle(glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.1f, -0.7f, 0.2f), glm::vec3(-0.9f, 0.1f, 0.3f), glm::vec3(0.0f, 0.0f, 0.7f), 20.0f));
 		loadModel();
 		for (int i = 0; i < indices.size() / 3; i++) {
-			triangles.push_back(newTriangle(vertices[indices[3 * i]].pos, vertices[indices[3 * i + 1]].pos, vertices[indices[3 * i + 2]].pos, glm::vec3(0.0f, 1.0f, 1.0f), 32.0f));
+			triangles.push_back(newTriangle(vertices[indices[3 * i]].pos, vertices[indices[3 * i + 1]].pos, vertices[indices[3 * i + 2]].pos, getNormalTriangle(vertices[indices[3 * i]].pos, vertices[indices[3 * i + 1]].pos, vertices[indices[3 * i + 2]].pos), glm::vec3(0.0f, 1.0f, 1.0f), 32.0f));
 		}
 
 		VkDeviceSize storageBufferSize = triangles.size() * sizeof(Triangle);

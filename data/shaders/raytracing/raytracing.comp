@@ -37,8 +37,9 @@ struct Triangle
 	vec3 v0;
 	vec3 v1;
 	vec3 v2;
-	vec3 diffuse;
+	vec3 normal;
 	float specular;
+	vec3 diffuse;
 	int id;
 };
 
@@ -84,33 +85,6 @@ float lightSpecular(vec3 normal, vec3 lightDir, float specularFactor)
 
 float triangleIntersect(in vec3 rayO, in vec3 rayD, in Triangle triangle)
 {
-/*
-	vec3 e1 = triangle.v1 - triangle.v0;
-	vec3 e2 = triangle.v2 - triangle.v0;
-	vec3 normal = normalize(cross(e1, e2));
-	float b = dot(normal, rayD);
-	vec3 w0 = rayO - triangle.v0;
-	float a = -dot(normal, w0);
-	float t = a / b;
-	vec3 p = rayO + t * rayD;
-	float uu, uv, vv, wu, wv, inverseD;
-	uu = dot(e1, e1);
-	uv = dot(e1, e2);
-	vv = dot(e2, e2);
-	vec3 w = p - triangle.v0;
-	wu = dot(w, e1);
-	wv = dot(w, e2);
-	inverseD = uv * uv - uu * vv;
-	inverseD = 1.0f / inverseD;
-	float u = (uv * wv - vv * wu) * inverseD;
-	if (u < 0.0f || u > 1.0f)
-		return -1.0f;
-	float v = (uv * wu - uu * wv) * inverseD;
-	if (v < 0.0f || (u + v) > 1.0f)
-		return -1.0f;
-
-	return t;
-*/
 	vec3 v0v1 = triangle.v1 - triangle.v0; 
     vec3 v0v2 = triangle.v2 - triangle.v0; 
     vec3 pvec = cross(rayD, v0v2);
@@ -166,7 +140,7 @@ int intersect(in vec3 rayO, in vec3 rayD, inout float resT)
 	for (int i = 0; i < triangles.length(); i++)
 	{
 		float tTriangle = triangleIntersect(rayO, rayD, triangles[i]);
-		if (tTriangle > 0.0f)
+		if ((tTriangle > EPSILON) && (tTriangle < resT))
 		{
 			id = triangles[i].id;
 			resT = tTriangle;

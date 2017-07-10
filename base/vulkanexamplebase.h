@@ -125,8 +125,8 @@ protected:
 	} semaphores;
 public: 
 	bool prepared = false;
-	uint32_t width = 1280;
-	uint32_t height = 720;
+	uint32_t width = 800;
+	uint32_t height = 600;
 
 	/** @brief Last frame time measured using a high performance timer (if available) */
 	float frameTimer = 1.0f;
